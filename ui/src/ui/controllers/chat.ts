@@ -61,9 +61,12 @@ export async function loadChatHistory(state: ChatState) {
     })) as { messages?: unknown[]; thinkingLevel?: string | null };
     state.chatMessages = Array.isArray(res.messages) ? res.messages : [];
     state.chatThinkingLevel = res.thinkingLevel ?? null;
-    // Clear streaming content now that history is loaded
-    state.chatStreamMessages = [];
-    state.chatStreamToolCalls = [];
+    // Only clear streaming content if we're not in an active run
+    // (streaming content has richer tool info than history)
+    if (!state.chatRunId) {
+      state.chatStreamMessages = [];
+      state.chatStreamToolCalls = [];
+    }
   } catch (err) {
     state.lastError = String(err);
   } finally {
@@ -75,6 +78,11 @@ export async function sendChatMessage(state: ChatState, message: string): Promis
   if (!state.client || !state.connected) return false;
   const msg = message.trim();
   if (!msg) return false;
+
+  // If we have streaming content, sync history first to preserve it
+  if (state.chatStreamMessages.length > 0 || state.chatStreamToolCalls.length > 0) {
+    await loadChatHistory(state);
+  }
 
   const now = Date.now();
   state.chatMessages = [
