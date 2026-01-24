@@ -56,8 +56,8 @@ export async function createGatewayRuntimeState(params: {
   agentRunSeq: Map<string, number>;
   dedupe: Map<string, DedupeEntry>;
   chatRunState: ReturnType<typeof createChatRunState>;
-  chatRunBuffers: Map<string, string>;
-  chatDeltaSentAt: Map<string, number>;
+  chatMessageIndex: Map<string, number>;
+  // removed - using messageIndex now
   addChatRun: (sessionId: string, entry: ChatRunEntry) => void;
   removeChatRun: (
     sessionId: string,
@@ -131,8 +131,7 @@ export async function createGatewayRuntimeState(params: {
   const dedupe = new Map<string, DedupeEntry>();
   const chatRunState = createChatRunState();
   const chatRunRegistry = chatRunState.registry;
-  const chatRunBuffers = chatRunState.buffers;
-  const chatDeltaSentAt = chatRunState.deltaSentAt;
+  const chatMessageIndex = chatRunState.messageIndexByRun;
   const addChatRun = chatRunRegistry.add;
   const removeChatRun = chatRunRegistry.remove;
   const chatAbortControllers = new Map<string, ChatAbortControllerEntry>();
@@ -146,8 +145,7 @@ export async function createGatewayRuntimeState(params: {
     agentRunSeq,
     dedupe,
     chatRunState,
-    chatRunBuffers,
-    chatDeltaSentAt,
+    chatMessageIndex,
     addChatRun,
     removeChatRun,
     chatAbortControllers,

@@ -503,8 +503,8 @@ export const nodeHandlers: GatewayRequestHandlers = {
         removeChatRun: context.removeChatRun,
         chatAbortControllers: context.chatAbortControllers,
         chatAbortedRuns: context.chatAbortedRuns,
-        chatRunBuffers: context.chatRunBuffers,
-        chatDeltaSentAt: context.chatDeltaSentAt,
+        chatMessageIndex: context.chatMessageIndex,
+
         dedupe: context.dedupe,
         agentRunSeq: context.agentRunSeq,
         getHealthCache: context.getHealthCache,

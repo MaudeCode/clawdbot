@@ -28,8 +28,8 @@ export function startGatewayMaintenanceTimers(params: {
   dedupe: Map<string, DedupeEntry>;
   chatAbortControllers: Map<string, ChatAbortControllerEntry>;
   chatRunState: { abortedRuns: Map<string, number> };
-  chatRunBuffers: Map<string, string>;
-  chatDeltaSentAt: Map<string, number>;
+  chatMessageIndex: Map<string, number>;
+  // removed - using messageIndex now
   removeChatRun: (
     sessionId: string,
     clientRunId: string,
@@ -89,8 +89,7 @@ export function startGatewayMaintenanceTimers(params: {
       abortChatRunById(
         {
           chatAbortControllers: params.chatAbortControllers,
-          chatRunBuffers: params.chatRunBuffers,
-          chatDeltaSentAt: params.chatDeltaSentAt,
+          chatMessageIndex: params.chatMessageIndex,
           chatAbortedRuns: params.chatRunState.abortedRuns,
           removeChatRun: params.removeChatRun,
           agentRunSeq: params.agentRunSeq,
@@ -105,8 +104,7 @@ export function startGatewayMaintenanceTimers(params: {
     for (const [runId, abortedAt] of params.chatRunState.abortedRuns) {
       if (now - abortedAt <= ABORTED_RUN_TTL_MS) continue;
       params.chatRunState.abortedRuns.delete(runId);
-      params.chatRunBuffers.delete(runId);
-      params.chatDeltaSentAt.delete(runId);
+      params.chatMessageIndex.delete(runId);
     }
   }, 60_000);
 

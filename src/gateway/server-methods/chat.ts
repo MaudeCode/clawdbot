@@ -250,8 +250,8 @@ export const chatHandlers: GatewayRequestHandlers = {
 
     const ops = {
       chatAbortControllers: context.chatAbortControllers,
-      chatRunBuffers: context.chatRunBuffers,
-      chatDeltaSentAt: context.chatDeltaSentAt,
+      chatMessageIndex: context.chatMessageIndex,
+
       chatAbortedRuns: context.chatAbortedRuns,
       removeChatRun: context.removeChatRun,
       agentRunSeq: context.agentRunSeq,
@@ -381,8 +381,8 @@ export const chatHandlers: GatewayRequestHandlers = {
       const res = abortChatRunsForSessionKey(
         {
           chatAbortControllers: context.chatAbortControllers,
-          chatRunBuffers: context.chatRunBuffers,
-          chatDeltaSentAt: context.chatDeltaSentAt,
+          chatMessageIndex: context.chatMessageIndex,
+
           chatAbortedRuns: context.chatAbortedRuns,
           removeChatRun: context.removeChatRun,
           agentRunSeq: context.agentRunSeq,

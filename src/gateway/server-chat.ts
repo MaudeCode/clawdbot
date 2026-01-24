@@ -60,34 +60,26 @@ export function createChatRunRegistry(): ChatRunRegistry {
 
 export type ChatRunState = {
   registry: ChatRunRegistry;
-  buffers: Map<string, string>;
-  /** Tracks the last text received per run to detect message boundaries */
-  lastMessageText: Map<string, string>;
-  deltaSentAt: Map<string, number>;
+  /** Current message index per run (increments after each tool call) */
+  messageIndexByRun: Map<string, number>;
   abortedRuns: Map<string, number>;
   clear: () => void;
 };
 
 export function createChatRunState(): ChatRunState {
   const registry = createChatRunRegistry();
-  const buffers = new Map<string, string>();
-  const lastMessageText = new Map<string, string>();
-  const deltaSentAt = new Map<string, number>();
+  const messageIndexByRun = new Map<string, number>();
   const abortedRuns = new Map<string, number>();
 
   const clear = () => {
     registry.clear();
-    buffers.clear();
-    lastMessageText.clear();
-    deltaSentAt.clear();
+    messageIndexByRun.clear();
     abortedRuns.clear();
   };
 
   return {
     registry,
-    buffers,
-    lastMessageText,
-    deltaSentAt,
+    messageIndexByRun,
     abortedRuns,
     clear,
   };
@@ -125,6 +117,13 @@ export function createAgentEventHandler({
     phase: "start" | "end",
     toolName: string,
   ) => {
+    // On tool-start, increment the message index so the next assistant text
+    // will be treated as a new message bubble
+    if (phase === "start") {
+      const currentIndex = chatRunState.messageIndexByRun.get(clientRunId) ?? 0;
+      chatRunState.messageIndexByRun.set(clientRunId, currentIndex + 1);
+    }
+
     const payload = {
       runId: clientRunId,
       sessionKey,
@@ -137,56 +136,24 @@ export function createAgentEventHandler({
   };
 
   const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
-    // Track message boundaries to accumulate text across multiple assistant messages.
-    // Within a single message, text only grows (streaming appends). When a new message
-    // starts after a tool call, the text resets to something different.
-    //
-    // Strategy:
-    // - `buffers[runId]` holds text from all PRIOR completed messages
-    // - `lastMessageText[runId]` holds the current message's latest text
-    // - When text is NOT a continuation of lastText → new message started → save lastText to buffer
-    // - Display = buffer + current message text
-    //
-    // Boundary detection: neither text is a prefix of the other
-    // - "Hello" → "Hello world" = continuation (text starts with lastText)
-    // - "Hello world" → "Here is" = new message (neither is prefix of other)
-    // - "OK" → "Here is a long response" = new message (neither is prefix)
+    // Get the current message index for this run (0 for first message, 1 after first tool, etc.)
+    const messageIndex = chatRunState.messageIndexByRun.get(clientRunId) ?? 0;
 
-    const lastText = chatRunState.lastMessageText.get(clientRunId) ?? "";
-    const isNewMessage =
-      lastText.length > 0 && !text.startsWith(lastText) && !lastText.startsWith(text);
-
-    if (isNewMessage) {
-      // Previous message completed - append it to the buffer
-      const existingBuffer = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
-      const updatedBuffer = existingBuffer
-        ? `${existingBuffer}\n\n${lastText.trim()}`
-        : lastText.trim();
-      chatRunState.buffers.set(clientRunId, updatedBuffer);
+    // Initialize index if this is the first message
+    if (!chatRunState.messageIndexByRun.has(clientRunId)) {
+      chatRunState.messageIndexByRun.set(clientRunId, 0);
     }
-
-    // Update current message text
-    chatRunState.lastMessageText.set(clientRunId, text);
-
-    // Build full accumulated text: prior messages + current message
-    const priorMessages = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
-    const accumulated = priorMessages ? `${priorMessages}\n\n${text}` : text;
-
-    // Throttle delta broadcasts
-    const now = Date.now();
-    const last = chatRunState.deltaSentAt.get(clientRunId) ?? 0;
-    if (now - last < 150) return;
-    chatRunState.deltaSentAt.set(clientRunId, now);
 
     const payload = {
       runId: clientRunId,
       sessionKey,
       seq,
       state: "delta" as const,
+      messageIndex,
       message: {
         role: "assistant",
-        content: [{ type: "text", text: accumulated }],
-        timestamp: now,
+        content: [{ type: "text", text }],
+        timestamp: Date.now(),
       },
     };
     broadcast("chat", payload, { dropIfSlow: true });
@@ -200,32 +167,15 @@ export function createAgentEventHandler({
     jobState: "done" | "error",
     error?: unknown,
   ) => {
-    // Build final accumulated text from buffer + current message
-    const priorMessages = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
-    const currentMessage = chatRunState.lastMessageText.get(clientRunId)?.trim() ?? "";
-    const text = priorMessages
-      ? currentMessage
-        ? `${priorMessages}\n\n${currentMessage}`
-        : priorMessages
-      : currentMessage;
+    // Clean up message index tracking
+    chatRunState.messageIndexByRun.delete(clientRunId);
 
-    // Clean up all tracking state
-    chatRunState.buffers.delete(clientRunId);
-    chatRunState.lastMessageText.delete(clientRunId);
-    chatRunState.deltaSentAt.delete(clientRunId);
     if (jobState === "done") {
       const payload = {
         runId: clientRunId,
         sessionKey,
         seq,
         state: "final" as const,
-        message: text
-          ? {
-              role: "assistant",
-              content: [{ type: "text", text }],
-              timestamp: Date.now(),
-            }
-          : undefined,
       };
       broadcast("chat", payload);
       nodeSendToSession(sessionKey, "chat", payload);
@@ -334,9 +284,7 @@ export function createAgentEventHandler({
       } else if (isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
         chatRunState.abortedRuns.delete(clientRunId);
         chatRunState.abortedRuns.delete(evt.runId);
-        chatRunState.buffers.delete(clientRunId);
-        chatRunState.lastMessageText.delete(clientRunId);
-        chatRunState.deltaSentAt.delete(clientRunId);
+        chatRunState.messageIndexByRun.delete(clientRunId);
         if (chatLink) {
           chatRunState.registry.remove(evt.runId, clientRunId, sessionKey);
         }
