@@ -2,23 +2,6 @@ import type { GatewayBrowserClient } from "../gateway";
 import { extractText } from "../chat/message-extract";
 import { generateUUID } from "../uuid";
 
-/** A single streaming message within a run */
-export type StreamingMessage = {
-  index: number;
-  text: string;
-  startedAt: number;
-};
-
-/** A tool call during streaming */
-export type StreamingToolCall = {
-  name: string;
-  status: "running" | "complete";
-  afterMessageIndex: number;
-  startedAt: number;
-  args?: unknown;
-  result?: string;
-};
-
 export type ChatState = {
   client: GatewayBrowserClient | null;
   connected: boolean;
@@ -29,10 +12,6 @@ export type ChatState = {
   chatSending: boolean;
   chatMessage: string;
   chatRunId: string | null;
-  /** Array of streaming messages (one per assistant message in the run) */
-  chatStreamMessages: StreamingMessage[];
-  /** Array of tool calls during streaming */
-  chatStreamToolCalls: StreamingToolCall[];
   /** Number of currently running tools (for loading indicator) */
   chatToolsRunning: number;
   /** Name of the most recently started tool */
@@ -61,8 +40,6 @@ export async function loadChatHistory(state: ChatState) {
     })) as { messages?: unknown[]; thinkingLevel?: string | null };
     state.chatMessages = Array.isArray(res.messages) ? res.messages : [];
     state.chatThinkingLevel = res.thinkingLevel ?? null;
-    // Keep ALL streaming content (messages + tool cards) - they're interleaved correctly
-    // Only clear on new run start (not on history load)
   } catch (err) {
     state.lastError = String(err);
   } finally {
@@ -75,12 +52,8 @@ export async function sendChatMessage(state: ChatState, message: string): Promis
   const msg = message.trim();
   if (!msg) return false;
 
-  // If we have streaming content, sync history first to preserve it
-  if (state.chatStreamMessages.length > 0 || state.chatStreamToolCalls.length > 0) {
-    await loadChatHistory(state);
-  }
-
   const now = Date.now();
+  // Add user message to chatMessages
   state.chatMessages = [
     ...state.chatMessages,
     {
@@ -94,10 +67,9 @@ export async function sendChatMessage(state: ChatState, message: string): Promis
   state.lastError = null;
   const runId = generateUUID();
   state.chatRunId = runId;
-  state.chatStreamMessages = [];
-  state.chatStreamToolCalls = [];
   state.chatToolsRunning = 0;
   state.chatCurrentTool = null;
+  
   try {
     await state.client.request("chat.send", {
       sessionKey: state.sessionKey,
@@ -109,11 +81,10 @@ export async function sendChatMessage(state: ChatState, message: string): Promis
   } catch (err) {
     const error = String(err);
     state.chatRunId = null;
-    state.chatStreamMessages = [];
-    state.chatStreamToolCalls = [];
     state.chatToolsRunning = 0;
     state.chatCurrentTool = null;
     state.lastError = error;
+    // Add error message
     state.chatMessages = [
       ...state.chatMessages,
       {
@@ -158,72 +129,116 @@ export function handleChatEvent(
     const text = extractText(payload.message);
     if (typeof text === "string") {
       const messageIndex = payload.messageIndex ?? 0;
-      const now = Date.now();
       
-      // Find or create the message at this index
-      const existingIndex = state.chatStreamMessages.findIndex(m => m.index === messageIndex);
-      if (existingIndex >= 0) {
-        // Update existing - create new array for reactivity
-        state.chatStreamMessages = state.chatStreamMessages.map((m, i) =>
-          i === existingIndex ? { ...m, text } : m
-        );
+      // Find or create assistant message at this index
+      // Messages are indexed from the start of this run
+      const runStartIndex = findRunStartIndex(state.chatMessages);
+      const targetIndex = runStartIndex + messageIndex;
+      
+      if (targetIndex < state.chatMessages.length) {
+        // Update existing message
+        const existing = state.chatMessages[targetIndex] as Record<string, unknown>;
+        if (existing.role === "assistant") {
+          const content = Array.isArray(existing.content) ? [...existing.content] : [];
+          const textItem = content.find((c: any) => c.type === "text");
+          if (textItem) {
+            (textItem as any).text = text;
+          } else {
+            content.unshift({ type: "text", text });
+          }
+          state.chatMessages = [
+            ...state.chatMessages.slice(0, targetIndex),
+            { ...existing, content },
+            ...state.chatMessages.slice(targetIndex + 1),
+          ];
+        }
       } else {
-        // Insert new message in order
-        const newMsg: StreamingMessage = { index: messageIndex, text, startedAt: now };
-        state.chatStreamMessages = [...state.chatStreamMessages, newMsg].sort(
-          (a, b) => a.index - b.index
-        );
+        // Add new assistant message
+        state.chatMessages = [
+          ...state.chatMessages,
+          {
+            role: "assistant",
+            content: [{ type: "text", text }],
+            timestamp: Date.now(),
+            _streaming: true,
+          },
+        ];
       }
     }
   } else if (payload.state === "tool-start") {
     state.chatToolsRunning = (state.chatToolsRunning || 0) + 1;
     state.chatCurrentTool = payload.tool?.name ?? null;
-    // Add tool call to streaming list
-    const currentMsgIndex = state.chatStreamMessages.length > 0
-      ? Math.max(...state.chatStreamMessages.map(m => m.index))
-      : -1;
-    const toolCall: StreamingToolCall = {
-      name: payload.tool?.name ?? "tool",
-      status: "running",
-      afterMessageIndex: currentMsgIndex,
-      startedAt: Date.now(),
-      args: payload.tool?.args,
-    };
-    state.chatStreamToolCalls = [...state.chatStreamToolCalls, toolCall];
+    
+    // Add tool_use to the last assistant message
+    const lastIdx = state.chatMessages.length - 1;
+    if (lastIdx >= 0) {
+      const last = state.chatMessages[lastIdx] as Record<string, unknown>;
+      if (last.role === "assistant") {
+        const content = Array.isArray(last.content) ? [...last.content] : [];
+        content.push({
+          type: "tool_use",
+          name: payload.tool?.name ?? "tool",
+          arguments: payload.tool?.args,
+          _running: true,
+        });
+        state.chatMessages = [
+          ...state.chatMessages.slice(0, lastIdx),
+          { ...last, content },
+        ];
+      }
+    }
   } else if (payload.state === "tool-end") {
     state.chatToolsRunning = Math.max(0, (state.chatToolsRunning || 0) - 1);
     if (state.chatToolsRunning === 0) {
       state.chatCurrentTool = null;
     }
-    // Mark the most recent running tool as complete and add result
-    const toolName = payload.tool?.name;
-    const runningIdx = state.chatStreamToolCalls.findIndex(
-      t => t.status === "running" && t.name === toolName
-    );
-    if (runningIdx >= 0) {
-      state.chatStreamToolCalls = state.chatStreamToolCalls.map((t, i) =>
-        i === runningIdx ? { ...t, status: "complete" as const, result: payload.tool?.result } : t
-      );
-    }
+    
+    // Add tool_result message
+    state.chatMessages = [
+      ...state.chatMessages,
+      {
+        role: "tool",
+        content: [{ 
+          type: "tool_result", 
+          name: payload.tool?.name ?? "tool",
+          text: payload.tool?.result,
+        }],
+        timestamp: Date.now(),
+      },
+    ];
   } else if (payload.state === "final") {
-    // Keep streaming content visible - it becomes the final view.
-    // Just clear the run state, not the content.
     state.chatRunId = null;
     state.chatToolsRunning = 0;
     state.chatCurrentTool = null;
+    // Mark streaming messages as complete
+    state.chatMessages = state.chatMessages.map(m => {
+      const msg = m as Record<string, unknown>;
+      if (msg._streaming) {
+        const { _streaming, ...rest } = msg;
+        return rest;
+      }
+      return m;
+    });
   } else if (payload.state === "aborted") {
-    state.chatStreamMessages = [];
-    state.chatStreamToolCalls = [];
     state.chatRunId = null;
     state.chatToolsRunning = 0;
     state.chatCurrentTool = null;
   } else if (payload.state === "error") {
-    state.chatStreamMessages = [];
-    state.chatStreamToolCalls = [];
     state.chatRunId = null;
     state.chatToolsRunning = 0;
     state.chatCurrentTool = null;
     state.lastError = payload.errorMessage ?? "chat error";
   }
   return payload.state;
+}
+
+function findRunStartIndex(messages: unknown[]): number {
+  // Find the index after the last user message (start of current run)
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] as Record<string, unknown>;
+    if (msg.role === "user") {
+      return i + 1;
+    }
+  }
+  return 0;
 }

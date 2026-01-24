@@ -10,7 +10,6 @@ import {
 import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
-  renderStreamingGroup,
 } from "../chat/grouped-render";
 import { renderMarkdownSidebar } from "./markdown-sidebar";
 import "../components/resizable-divider";
@@ -32,10 +31,6 @@ export type ChatProps = {
   compactionStatus?: CompactionIndicatorStatus | null;
   messages: unknown[];
   toolMessages: unknown[];
-  /** Array of streaming messages (one per assistant message in the run) */
-  streamMessages: Array<{ index: number; text: string; startedAt: number }>;
-  /** Array of tool calls during streaming */
-  streamToolCalls: Array<{ name: string; status: "running" | "complete"; afterMessageIndex: number; startedAt: number; args?: unknown; result?: string }>;
   /** Number of tools currently running */
   toolsRunning?: number;
   /** Name of the most recently started tool */
@@ -134,17 +129,6 @@ export function renderChat(props: ChatProps) {
             currentTool: item.currentTool,
           });
         }
-
-        if (item.kind === "stream") {
-          return renderStreamingGroup(
-            item.text,
-            item.startedAt,
-            props.onOpenSidebar,
-            assistantIdentity,
-          );
-        }
-
-        // stream-tool items are no longer rendered - history provides tool cards
 
         if (item.kind === "group") {
           return renderMessageGroup(item, {
@@ -360,20 +344,6 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
     }
   }
 
-  // Render streaming text messages
-  const streamMsgs = props.streamMessages ?? [];
-  
-  for (const msg of streamMsgs) {
-    if (msg.text.trim().length > 0) {
-      items.push({
-        kind: "stream",
-        key: `stream:${props.sessionKey}:${msg.index}`,
-        text: msg.text,
-        startedAt: msg.startedAt,
-      });
-    }
-  }
-  
   // Show tool indicator if tools are still running
   if ((props.toolsRunning ?? 0) > 0) {
     items.push({
