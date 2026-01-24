@@ -352,7 +352,8 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
     const msg = history[i];
     const normalized = normalizeMessage(msg);
 
-    if (!props.showThinking && normalized.role.toLowerCase() === "toolresult") {
+    // Skip tool_result messages - tool cards show results inline
+    if (normalized.role.toLowerCase() === "toolresult") {
       continue;
     }
 
