@@ -9,6 +9,14 @@ export type StreamingMessage = {
   startedAt: number;
 };
 
+/** A tool call during streaming */
+export type StreamingToolCall = {
+  name: string;
+  status: "running" | "complete";
+  afterMessageIndex: number;
+  startedAt: number;
+};
+
 export type ChatState = {
   client: GatewayBrowserClient | null;
   connected: boolean;
@@ -21,6 +29,8 @@ export type ChatState = {
   chatRunId: string | null;
   /** Array of streaming messages (one per assistant message in the run) */
   chatStreamMessages: StreamingMessage[];
+  /** Array of tool calls during streaming */
+  chatStreamToolCalls: StreamingToolCall[];
   /** Number of currently running tools (for loading indicator) */
   chatToolsRunning: number;
   /** Name of the most recently started tool */
@@ -76,6 +86,7 @@ export async function sendChatMessage(state: ChatState, message: string): Promis
   const runId = generateUUID();
   state.chatRunId = runId;
   state.chatStreamMessages = [];
+  state.chatStreamToolCalls = [];
   state.chatToolsRunning = 0;
   state.chatCurrentTool = null;
   try {
@@ -90,6 +101,7 @@ export async function sendChatMessage(state: ChatState, message: string): Promis
     const error = String(err);
     state.chatRunId = null;
     state.chatStreamMessages = [];
+    state.chatStreamToolCalls = [];
     state.chatToolsRunning = 0;
     state.chatCurrentTool = null;
     state.lastError = error;
@@ -157,23 +169,47 @@ export function handleChatEvent(
   } else if (payload.state === "tool-start") {
     state.chatToolsRunning = (state.chatToolsRunning || 0) + 1;
     state.chatCurrentTool = payload.tool?.name ?? null;
+    // Add tool call to streaming list
+    const currentMsgIndex = state.chatStreamMessages.length > 0
+      ? Math.max(...state.chatStreamMessages.map(m => m.index))
+      : -1;
+    const toolCall: StreamingToolCall = {
+      name: payload.tool?.name ?? "tool",
+      status: "running",
+      afterMessageIndex: currentMsgIndex,
+      startedAt: Date.now(),
+    };
+    state.chatStreamToolCalls = [...state.chatStreamToolCalls, toolCall];
   } else if (payload.state === "tool-end") {
     state.chatToolsRunning = Math.max(0, (state.chatToolsRunning || 0) - 1);
     if (state.chatToolsRunning === 0) {
       state.chatCurrentTool = null;
     }
+    // Mark the most recent running tool as complete
+    const toolName = payload.tool?.name;
+    const runningIdx = state.chatStreamToolCalls.findIndex(
+      t => t.status === "running" && t.name === toolName
+    );
+    if (runningIdx >= 0) {
+      state.chatStreamToolCalls = state.chatStreamToolCalls.map((t, i) =>
+        i === runningIdx ? { ...t, status: "complete" as const } : t
+      );
+    }
   } else if (payload.state === "final") {
     state.chatStreamMessages = [];
+    state.chatStreamToolCalls = [];
     state.chatRunId = null;
     state.chatToolsRunning = 0;
     state.chatCurrentTool = null;
   } else if (payload.state === "aborted") {
     state.chatStreamMessages = [];
+    state.chatStreamToolCalls = [];
     state.chatRunId = null;
     state.chatToolsRunning = 0;
     state.chatCurrentTool = null;
   } else if (payload.state === "error") {
     state.chatStreamMessages = [];
+    state.chatStreamToolCalls = [];
     state.chatRunId = null;
     state.chatToolsRunning = 0;
     state.chatCurrentTool = null;

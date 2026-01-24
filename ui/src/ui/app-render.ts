@@ -426,6 +426,7 @@ export function renderApp(state: AppViewState) {
                 state.sessionKey = next;
                 state.chatMessage = "";
                 state.chatStreamMessages = [];
+                state.chatStreamToolCalls = [];
                 state.chatRunId = null;
                 state.chatQueue = [];
                 state.resetToolStream();
@@ -448,6 +449,7 @@ export function renderApp(state: AppViewState) {
               messages: state.chatMessages,
               toolMessages: state.chatToolMessages,
               streamMessages: state.chatStreamMessages,
+              streamToolCalls: state.chatStreamToolCalls,
               toolsRunning: state.chatToolsRunning,
               currentTool: state.chatCurrentTool,
               draft: state.chatMessage,

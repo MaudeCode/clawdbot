@@ -11,6 +11,7 @@ import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
   renderStreamingGroup,
+  renderStreamingToolCard,
 } from "../chat/grouped-render";
 import { renderMarkdownSidebar } from "./markdown-sidebar";
 import "../components/resizable-divider";
@@ -34,6 +35,8 @@ export type ChatProps = {
   toolMessages: unknown[];
   /** Array of streaming messages (one per assistant message in the run) */
   streamMessages: Array<{ index: number; text: string; startedAt: number }>;
+  /** Array of tool calls during streaming */
+  streamToolCalls: Array<{ name: string; status: "running" | "complete"; afterMessageIndex: number; startedAt: number }>;
   /** Number of tools currently running */
   toolsRunning?: number;
   /** Name of the most recently started tool */
@@ -140,6 +143,10 @@ export function renderChat(props: ChatProps) {
             props.onOpenSidebar,
             assistantIdentity,
           );
+        }
+
+        if (item.kind === "stream-tool") {
+          return renderStreamingToolCard(item.name, item.status, assistantIdentity);
         }
 
         if (item.kind === "group") {
@@ -358,9 +365,13 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
     }
   }
 
-  // Render streaming messages (each as a separate bubble)
-  if (props.streamMessages && props.streamMessages.length > 0) {
-    for (const msg of props.streamMessages) {
+  // Render streaming messages and tool calls interleaved
+  const streamMsgs = props.streamMessages ?? [];
+  const streamTools = props.streamToolCalls ?? [];
+  
+  if (streamMsgs.length > 0 || streamTools.length > 0) {
+    // Render messages and tool calls in order
+    for (const msg of streamMsgs) {
       if (msg.text.trim().length > 0) {
         items.push({
           kind: "stream",
@@ -369,8 +380,26 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
           startedAt: msg.startedAt,
         });
       }
+      // Render any tool calls that came after this message
+      for (const tool of streamTools.filter(t => t.afterMessageIndex === msg.index)) {
+        items.push({
+          kind: "stream-tool",
+          key: `stream-tool:${props.sessionKey}:${tool.name}:${tool.startedAt}`,
+          name: tool.name,
+          status: tool.status,
+        });
+      }
     }
-    // Show tool indicator after the last message if tools are running
+    // Render any tool calls that came before any messages (afterMessageIndex = -1)
+    for (const tool of streamTools.filter(t => t.afterMessageIndex === -1)) {
+      items.push({
+        kind: "stream-tool",
+        key: `stream-tool:${props.sessionKey}:${tool.name}:${tool.startedAt}`,
+        name: tool.name,
+        status: tool.status,
+      });
+    }
+    // Show tool indicator if tools are still running
     if ((props.toolsRunning ?? 0) > 0) {
       items.push({
         kind: "reading-indicator",

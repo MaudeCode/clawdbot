@@ -1182,6 +1182,25 @@
   background: rgba(16, 24, 40, 0.05);
 }
 
+/* Streaming tool card */
+.chat-tool-card--streaming {
+  min-width: 120px;
+}
+
+.chat-tool-card--running {
+  opacity: 0.85;
+}
+
+.chat-tool-card__spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: chatToolSpin 0.8s linear infinite;
+}
+
 .chat-stamp {
   font-size: 11px;
   color: var(--muted);

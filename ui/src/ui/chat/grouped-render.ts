@@ -48,6 +48,37 @@ export function renderReadingIndicatorGroup(
   `;
 }
 
+import { resolveToolDisplay } from "../tool-display";
+
+export function renderStreamingToolCard(
+  name: string,
+  status: "running" | "complete",
+  assistant?: AssistantIdentity,
+) {
+  const display = resolveToolDisplay({ name });
+  const isRunning = status === "running";
+  
+  return html`
+    <div class="chat-group assistant">
+      ${renderAvatar("assistant", assistant)}
+      <div class="chat-group-messages">
+        <div class="chat-tool-card chat-tool-card--streaming ${isRunning ? "chat-tool-card--running" : ""}">
+          <div class="chat-tool-card__header">
+            <div class="chat-tool-card__title">
+              ${isRunning
+                ? html`<span class="chat-tool-card__spinner"></span>`
+                : html`<span class="chat-tool-card__icon">${display.emoji}</span>`
+              }
+              <span>${display.label}</span>
+            </div>
+            ${!isRunning ? html`<span class="chat-tool-card__status">✓</span>` : nothing}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export function renderStreamingGroup(
   text: string,
   startedAt: number,
