@@ -969,6 +969,45 @@
   }
 }
 
+/* Tool running indicator */
+.chat-reading-indicator__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--chat-text);
+  opacity: 0.85;
+  font-size: 0.85em;
+}
+
+.chat-reading-indicator__spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--chat-text);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: chatToolSpin 0.8s linear infinite;
+}
+
+.chat-reading-indicator__tool-name {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+@keyframes chatToolSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-reading-indicator__spinner {
+    animation: none;
+    border-top-color: var(--chat-text);
+    opacity: 0.5;
+  }
+}
+
 .chat-text {
   overflow-wrap: anywhere;
   word-break: break-word;

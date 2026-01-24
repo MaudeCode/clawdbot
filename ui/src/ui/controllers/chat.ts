@@ -14,15 +14,20 @@ export type ChatState = {
   chatRunId: string | null;
   chatStream: string | null;
   chatStreamStartedAt: number | null;
+  /** Number of currently running tools (for loading indicator) */
+  chatToolsRunning: number;
+  /** Name of the most recently started tool */
+  chatCurrentTool: string | null;
   lastError: string | null;
 };
 
 export type ChatEventPayload = {
   runId: string;
   sessionKey: string;
-  state: "delta" | "final" | "aborted" | "error";
+  state: "delta" | "final" | "aborted" | "error" | "tool-start" | "tool-end";
   message?: unknown;
   errorMessage?: string;
+  tool?: { name: string };
 };
 
 export async function loadChatHistory(state: ChatState) {
@@ -64,6 +69,8 @@ export async function sendChatMessage(state: ChatState, message: string): Promis
   state.chatRunId = runId;
   state.chatStream = "";
   state.chatStreamStartedAt = now;
+  state.chatToolsRunning = 0;
+  state.chatCurrentTool = null;
   try {
     await state.client.request("chat.send", {
       sessionKey: state.sessionKey,
@@ -77,6 +84,8 @@ export async function sendChatMessage(state: ChatState, message: string): Promis
     state.chatRunId = null;
     state.chatStream = null;
     state.chatStreamStartedAt = null;
+    state.chatToolsRunning = 0;
+    state.chatCurrentTool = null;
     state.lastError = error;
     state.chatMessages = [
       ...state.chatMessages,
@@ -125,18 +134,32 @@ export function handleChatEvent(
       // so we always accept the latest text without length checks.
       state.chatStream = next;
     }
+  } else if (payload.state === "tool-start") {
+    state.chatToolsRunning = (state.chatToolsRunning || 0) + 1;
+    state.chatCurrentTool = payload.tool?.name ?? null;
+  } else if (payload.state === "tool-end") {
+    state.chatToolsRunning = Math.max(0, (state.chatToolsRunning || 0) - 1);
+    if (state.chatToolsRunning === 0) {
+      state.chatCurrentTool = null;
+    }
   } else if (payload.state === "final") {
     state.chatStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
+    state.chatToolsRunning = 0;
+    state.chatCurrentTool = null;
   } else if (payload.state === "aborted") {
     state.chatStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
+    state.chatToolsRunning = 0;
+    state.chatCurrentTool = null;
   } else if (payload.state === "error") {
     state.chatStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
+    state.chatToolsRunning = 0;
+    state.chatCurrentTool = null;
     state.lastError = payload.errorMessage ?? "chat error";
   }
   return payload.state;

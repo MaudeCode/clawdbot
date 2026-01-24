@@ -124,6 +124,8 @@ export class ClawdbotApp extends LitElement {
   @state() chatToolMessages: unknown[] = [];
   @state() chatStream: string | null = null;
   @state() chatStreamStartedAt: number | null = null;
+  @state() chatToolsRunning: number = 0;
+  @state() chatCurrentTool: string | null = null;
   @state() chatRunId: string | null = null;
   @state() compactionStatus: import("./app-tool-stream").CompactionStatus | null = null;
   @state() chatAvatarUrl: string | null = null;

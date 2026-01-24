@@ -13,15 +13,35 @@ import {
 } from "./message-extract";
 import { extractToolCards, renderToolCardSidebar } from "./tool-cards";
 
-export function renderReadingIndicatorGroup(assistant?: AssistantIdentity) {
+export type ReadingIndicatorOptions = {
+  toolsRunning?: number;
+  currentTool?: string | null;
+};
+
+export function renderReadingIndicatorGroup(
+  assistant?: AssistantIdentity,
+  options?: ReadingIndicatorOptions,
+) {
+  const { toolsRunning = 0, currentTool = null } = options ?? {};
+  const showToolIndicator = toolsRunning > 0 && currentTool;
+
   return html`
     <div class="chat-group assistant">
       ${renderAvatar("assistant", assistant)}
       <div class="chat-group-messages">
         <div class="chat-bubble chat-reading-indicator" aria-hidden="true">
-          <span class="chat-reading-indicator__dots">
-            <span></span><span></span><span></span>
-          </span>
+          ${showToolIndicator
+            ? html`
+                <span class="chat-reading-indicator__tool">
+                  <span class="chat-reading-indicator__spinner"></span>
+                  <span class="chat-reading-indicator__tool-name">${currentTool}</span>
+                </span>
+              `
+            : html`
+                <span class="chat-reading-indicator__dots">
+                  <span></span><span></span><span></span>
+                </span>
+              `}
         </div>
       </div>
     </div>

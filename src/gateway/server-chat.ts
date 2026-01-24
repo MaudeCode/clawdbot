@@ -118,6 +118,24 @@ export function createAgentEventHandler({
   resolveSessionKeyForRun,
   clearAgentRunContext,
 }: AgentEventHandlerOptions) {
+  const emitToolEvent = (
+    sessionKey: string,
+    clientRunId: string,
+    seq: number,
+    phase: "start" | "end",
+    toolName: string,
+  ) => {
+    const payload = {
+      runId: clientRunId,
+      sessionKey,
+      seq,
+      state: phase === "start" ? ("tool-start" as const) : ("tool-end" as const),
+      tool: { name: toolName },
+    };
+    broadcast("chat", payload);
+    nodeSendToSession(sessionKey, "chat", payload);
+  };
+
   const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
     // Track message boundaries to accumulate text across multiple assistant messages.
     // Within a single message, text only grows (it's accumulated). When a new message
@@ -270,6 +288,20 @@ export function createAgentEventHandler({
       nodeSendToSession(sessionKey, "agent", agentPayload);
       if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
         emitChatDelta(sessionKey, clientRunId, evt.seq, evt.data.text);
+      } else if (
+        !isAborted &&
+        evt.stream === "tool" &&
+        typeof evt.data?.phase === "string" &&
+        typeof evt.data?.name === "string"
+      ) {
+        // Emit tool start/end events to the chat channel for loading indicators.
+        // Always emit these regardless of verbose setting (verbose controls detailed agent events).
+        const toolPhase = evt.data.phase;
+        if (toolPhase === "start") {
+          emitToolEvent(sessionKey, clientRunId, evt.seq, "start", evt.data.name);
+        } else if (toolPhase === "result") {
+          emitToolEvent(sessionKey, clientRunId, evt.seq, "end", evt.data.name);
+        }
       } else if (!isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
         if (chatLink) {
           const finished = chatRunState.registry.shift(evt.runId);

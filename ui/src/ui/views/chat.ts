@@ -34,6 +34,10 @@ export type ChatProps = {
   toolMessages: unknown[];
   stream: string | null;
   streamStartedAt: number | null;
+  /** Number of tools currently running */
+  toolsRunning?: number;
+  /** Name of the most recently started tool */
+  currentTool?: string | null;
   assistantAvatarUrl?: string | null;
   draft: string;
   queue: ChatQueueItem[];
@@ -123,7 +127,10 @@ export function renderChat(props: ChatProps) {
       ${props.loading ? html`<div class="muted">Loading chat…</div>` : nothing}
       ${repeat(buildChatItems(props), (item) => item.key, (item) => {
         if (item.kind === "reading-indicator") {
-          return renderReadingIndicatorGroup(assistantIdentity);
+          return renderReadingIndicatorGroup(assistantIdentity, {
+            toolsRunning: item.toolsRunning,
+            currentTool: item.currentTool,
+          });
         }
 
         if (item.kind === "stream") {
@@ -361,7 +368,13 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
         startedAt: props.streamStartedAt ?? Date.now(),
       });
     } else {
-      items.push({ kind: "reading-indicator", key });
+      // Show reading indicator with tool info if available
+      items.push({
+        kind: "reading-indicator",
+        key,
+        toolsRunning: props.toolsRunning ?? 0,
+        currentTool: props.currentTool ?? null,
+      });
     }
   }
 
