@@ -116,6 +116,7 @@ export function createAgentEventHandler({
     seq: number,
     phase: "start" | "end",
     toolName: string,
+    extra?: { args?: unknown; result?: string },
   ) => {
     // On tool-start, increment the message index so the next assistant text
     // will be treated as a new message bubble
@@ -129,7 +130,11 @@ export function createAgentEventHandler({
       sessionKey,
       seq,
       state: phase === "start" ? ("tool-start" as const) : ("tool-end" as const),
-      tool: { name: toolName },
+      tool: {
+        name: toolName,
+        ...(extra?.args != null ? { args: extra.args } : {}),
+        ...(extra?.result != null ? { result: extra.result } : {}),
+      },
     };
     broadcast("chat", payload);
     nodeSendToSession(sessionKey, "chat", payload);
@@ -264,9 +269,15 @@ export function createAgentEventHandler({
         // Always emit these regardless of verbose setting (verbose controls detailed agent events).
         const toolPhase = evt.data.phase;
         if (toolPhase === "start") {
-          emitToolEvent(sessionKey, clientRunId, evt.seq, "start", evt.data.name);
+          emitToolEvent(sessionKey, clientRunId, evt.seq, "start", evt.data.name, {
+            args: evt.data.args,
+          });
         } else if (toolPhase === "result") {
-          emitToolEvent(sessionKey, clientRunId, evt.seq, "end", evt.data.name);
+          // Include result content (truncated for large outputs)
+          const result = typeof evt.data.result === "string" ? evt.data.result : undefined;
+          emitToolEvent(sessionKey, clientRunId, evt.seq, "end", evt.data.name, {
+            result,
+          });
         }
       } else if (!isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
         if (chatLink) {

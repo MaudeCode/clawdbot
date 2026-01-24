@@ -15,6 +15,8 @@ export type StreamingToolCall = {
   status: "running" | "complete";
   afterMessageIndex: number;
   startedAt: number;
+  args?: unknown;
+  result?: string;
 };
 
 export type ChatState = {
@@ -45,7 +47,7 @@ export type ChatEventPayload = {
   messageIndex?: number;
   message?: unknown;
   errorMessage?: string;
-  tool?: { name: string };
+  tool?: { name: string; args?: unknown; result?: string };
 };
 
 export async function loadChatHistory(state: ChatState) {
@@ -181,6 +183,7 @@ export function handleChatEvent(
       status: "running",
       afterMessageIndex: currentMsgIndex,
       startedAt: Date.now(),
+      args: payload.tool?.args,
     };
     state.chatStreamToolCalls = [...state.chatStreamToolCalls, toolCall];
   } else if (payload.state === "tool-end") {
@@ -188,14 +191,14 @@ export function handleChatEvent(
     if (state.chatToolsRunning === 0) {
       state.chatCurrentTool = null;
     }
-    // Mark the most recent running tool as complete
+    // Mark the most recent running tool as complete and add result
     const toolName = payload.tool?.name;
     const runningIdx = state.chatStreamToolCalls.findIndex(
       t => t.status === "running" && t.name === toolName
     );
     if (runningIdx >= 0) {
       state.chatStreamToolCalls = state.chatStreamToolCalls.map((t, i) =>
-        i === runningIdx ? { ...t, status: "complete" as const } : t
+        i === runningIdx ? { ...t, status: "complete" as const, result: payload.tool?.result } : t
       );
     }
   } else if (payload.state === "final") {

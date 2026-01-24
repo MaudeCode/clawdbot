@@ -48,21 +48,43 @@ export function renderReadingIndicatorGroup(
   `;
 }
 
-import { resolveToolDisplay } from "../tool-display";
+import { resolveToolDisplay, formatToolDetail } from "../tool-display";
+import { formatToolOutputForSidebar, getTruncatedPreview } from "./tool-helpers";
+import { TOOL_INLINE_THRESHOLD } from "./constants";
 
 export function renderStreamingToolCard(
   name: string,
   status: "running" | "complete",
   assistant?: AssistantIdentity,
+  args?: unknown,
+  result?: string,
+  onOpenSidebar?: (content: string) => void,
 ) {
-  const display = resolveToolDisplay({ name });
+  const display = resolveToolDisplay({ name, args });
+  const detail = formatToolDetail(display);
   const isRunning = status === "running";
+  const hasResult = Boolean(result?.trim());
+  const isShort = hasResult && (result?.length ?? 0) <= TOOL_INLINE_THRESHOLD;
+  const showCollapsed = hasResult && !isShort;
+  
+  const canClick = Boolean(onOpenSidebar && hasResult);
+  const handleClick = canClick
+    ? () => {
+        const info = formatToolOutputForSidebar(result!);
+        onOpenSidebar!(info);
+      }
+    : undefined;
   
   return html`
     <div class="chat-group assistant">
       ${renderAvatar("assistant", assistant)}
       <div class="chat-group-messages">
-        <div class="chat-tool-card chat-tool-card--streaming ${isRunning ? "chat-tool-card--running" : ""}">
+        <div
+          class="chat-tool-card chat-tool-card--streaming ${isRunning ? "chat-tool-card--running" : ""} ${canClick ? "chat-tool-card--clickable" : ""}"
+          @click=${handleClick}
+          role=${canClick ? "button" : nothing}
+          tabindex=${canClick ? "0" : nothing}
+        >
           <div class="chat-tool-card__header">
             <div class="chat-tool-card__title">
               ${isRunning
@@ -71,8 +93,19 @@ export function renderStreamingToolCard(
               }
               <span>${display.label}</span>
             </div>
-            ${!isRunning ? html`<span class="chat-tool-card__status">✓</span>` : nothing}
+            ${canClick
+              ? html`<span class="chat-tool-card__action">View ›</span>`
+              : !isRunning ? html`<span class="chat-tool-card__status">✓</span>` : nothing}
           </div>
+          ${detail
+            ? html`<div class="chat-tool-card__detail">${detail}</div>`
+            : nothing}
+          ${showCollapsed
+            ? html`<div class="chat-tool-card__preview mono">${getTruncatedPreview(result!)}</div>`
+            : nothing}
+          ${isShort
+            ? html`<div class="chat-tool-card__inline mono">${result}</div>`
+            : nothing}
         </div>
       </div>
     </div>

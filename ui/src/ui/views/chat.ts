@@ -36,7 +36,7 @@ export type ChatProps = {
   /** Array of streaming messages (one per assistant message in the run) */
   streamMessages: Array<{ index: number; text: string; startedAt: number }>;
   /** Array of tool calls during streaming */
-  streamToolCalls: Array<{ name: string; status: "running" | "complete"; afterMessageIndex: number; startedAt: number }>;
+  streamToolCalls: Array<{ name: string; status: "running" | "complete"; afterMessageIndex: number; startedAt: number; args?: unknown; result?: string }>;
   /** Number of tools currently running */
   toolsRunning?: number;
   /** Name of the most recently started tool */
@@ -146,7 +146,14 @@ export function renderChat(props: ChatProps) {
         }
 
         if (item.kind === "stream-tool") {
-          return renderStreamingToolCard(item.name, item.status, assistantIdentity);
+          return renderStreamingToolCard(
+            item.name,
+            item.status,
+            assistantIdentity,
+            item.args,
+            item.result,
+            props.onOpenSidebar,
+          );
         }
 
         if (item.kind === "group") {
@@ -377,6 +384,8 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
         key: `stream-tool:${props.sessionKey}:${tool.name}:${tool.startedAt}`,
         name: tool.name,
         status: tool.status,
+        args: tool.args,
+        result: tool.result,
       });
     }
     // Then render messages and tool calls in order
@@ -396,6 +405,8 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
           key: `stream-tool:${props.sessionKey}:${tool.name}:${tool.startedAt}`,
           name: tool.name,
           status: tool.status,
+          args: tool.args,
+          result: tool.result,
         });
       }
     }

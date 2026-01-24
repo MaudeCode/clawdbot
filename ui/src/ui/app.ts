@@ -123,7 +123,7 @@ export class ClawdbotApp extends LitElement {
   @state() chatMessages: unknown[] = [];
   @state() chatToolMessages: unknown[] = [];
   @state() chatStreamMessages: Array<{ index: number; text: string; startedAt: number }> = [];
-  @state() chatStreamToolCalls: Array<{ name: string; status: "running" | "complete"; afterMessageIndex: number; startedAt: number }> = [];
+  @state() chatStreamToolCalls: Array<{ name: string; status: "running" | "complete"; afterMessageIndex: number; startedAt: number; args?: unknown; result?: string }> = [];
   @state() chatToolsRunning: number = 0;
   @state() chatCurrentTool: string | null = null;
   @state() chatRunId: string | null = null;
