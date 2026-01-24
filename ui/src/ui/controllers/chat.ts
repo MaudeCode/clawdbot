@@ -121,10 +121,9 @@ export function handleChatEvent(
   if (payload.state === "delta") {
     const next = extractText(payload.message);
     if (typeof next === "string") {
-      const current = state.chatStream ?? "";
-      if (!current || next.length >= current.length) {
-        state.chatStream = next;
-      }
+      // Server accumulates text across all assistant messages in a run,
+      // so we always accept the latest text without length checks.
+      state.chatStream = next;
     }
   } else if (payload.state === "final") {
     state.chatStream = null;
