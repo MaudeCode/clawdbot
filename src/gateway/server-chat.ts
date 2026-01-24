@@ -138,17 +138,23 @@ export function createAgentEventHandler({
 
   const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
     // Track message boundaries to accumulate text across multiple assistant messages.
-    // Within a single message, text only grows (it's accumulated). When a new message
-    // starts after a tool call, text resets to a shorter value.
+    // Within a single message, text only grows (streaming appends). When a new message
+    // starts after a tool call, the text resets to something different.
     //
     // Strategy:
     // - `buffers[runId]` holds text from all PRIOR completed messages
     // - `lastMessageText[runId]` holds the current message's latest text
-    // - When text gets shorter, the previous message completed → save it to buffer
+    // - When text is NOT a continuation of lastText → new message started → save lastText to buffer
     // - Display = buffer + current message text
+    //
+    // Boundary detection: neither text is a prefix of the other
+    // - "Hello" → "Hello world" = continuation (text starts with lastText)
+    // - "Hello world" → "Here is" = new message (neither is prefix of other)
+    // - "OK" → "Here is a long response" = new message (neither is prefix)
 
     const lastText = chatRunState.lastMessageText.get(clientRunId) ?? "";
-    const isNewMessage = lastText.length > 0 && text.length < lastText.length;
+    const isNewMessage =
+      lastText.length > 0 && !text.startsWith(lastText) && !lastText.startsWith(text);
 
     if (isNewMessage) {
       // Previous message completed - append it to the buffer
