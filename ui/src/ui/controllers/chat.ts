@@ -193,19 +193,29 @@ export function handleChatEvent(
       state.chatCurrentTool = null;
     }
     
-    // Add tool_result message
-    state.chatMessages = [
-      ...state.chatMessages,
-      {
-        role: "tool",
-        content: [{ 
-          type: "tool_result", 
-          name: payload.tool?.name ?? "tool",
-          text: payload.tool?.result,
-        }],
-        timestamp: Date.now(),
-      },
-    ];
+    // Update the tool_use in the last assistant message to include result
+    const lastIdx = state.chatMessages.length - 1;
+    if (lastIdx >= 0) {
+      const last = state.chatMessages[lastIdx] as Record<string, unknown>;
+      if (last.role === "assistant") {
+        const content = Array.isArray(last.content) ? [...last.content] : [];
+        // Find the running tool with this name and update it
+        const toolIdx = content.findIndex(
+          (c: any) => c.type === "tool_use" && c.name === payload.tool?.name && c._running
+        );
+        if (toolIdx >= 0) {
+          content[toolIdx] = {
+            ...content[toolIdx],
+            _running: false,
+            result: payload.tool?.result,
+          };
+          state.chatMessages = [
+            ...state.chatMessages.slice(0, lastIdx),
+            { ...last, content },
+          ];
+        }
+      }
+    }
   } else if (payload.state === "final") {
     state.chatRunId = null;
     state.chatToolsRunning = 0;

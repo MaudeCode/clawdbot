@@ -21,10 +21,13 @@ export function extractToolCards(message: unknown): ToolCard[] {
       ["toolcall", "tool_call", "tooluse", "tool_use"].includes(kind) ||
       (typeof item.name === "string" && item.arguments != null);
     if (isToolCall) {
+      // Include result if attached (from streaming) or text
+      const result = typeof item.result === "string" ? item.result : undefined;
       cards.push({
         kind: "call",
         name: (item.name as string) ?? "tool",
         args: coerceArgs(item.arguments ?? item.args),
+        text: result,
       });
     }
   }

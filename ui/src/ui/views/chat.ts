@@ -326,7 +326,12 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
     const msg = history[i];
     const normalized = normalizeMessage(msg);
 
-    // Tool result messages are handled by extractToolCards in renderGroupedMessage
+    // Skip tool/tool_result messages - results are shown in tool_use cards
+    if (normalized.role.toLowerCase() === "tool" || 
+        normalized.role.toLowerCase() === "toolresult" ||
+        normalized.role.toLowerCase() === "tool_result") {
+      continue;
+    }
 
     items.push({
       kind: "message",
