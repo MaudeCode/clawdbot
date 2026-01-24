@@ -348,6 +348,8 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
       },
     });
   }
+  const hasStreamingToolCards = (props.streamToolCalls?.length ?? 0) > 0;
+  
   for (let i = historyStart; i < history.length; i++) {
     const msg = history[i];
     const normalized = normalizeMessage(msg);
@@ -355,6 +357,20 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
     // Skip tool_result messages - tool cards show results inline
     if (normalized.role.toLowerCase() === "toolresult") {
       continue;
+    }
+
+    // If we have streaming tool cards, skip history messages that only contain tool_use
+    // (streaming cards have richer data with results)
+    if (hasStreamingToolCards && normalized.role === "assistant") {
+      const hasOnlyToolUse = normalized.content.every(
+        c => c.type === "tool_call" || c.type === "tool_use"
+      );
+      const hasNoText = !normalized.content.some(
+        c => c.type === "text" && c.text?.trim()
+      );
+      if (hasOnlyToolUse || hasNoText) {
+        continue;
+      }
     }
 
     items.push({

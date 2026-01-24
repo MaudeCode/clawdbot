@@ -61,11 +61,11 @@ export async function loadChatHistory(state: ChatState) {
     })) as { messages?: unknown[]; thinkingLevel?: string | null };
     state.chatMessages = Array.isArray(res.messages) ? res.messages : [];
     state.chatThinkingLevel = res.thinkingLevel ?? null;
-    // Only clear streaming content if we're not in an active run
-    // (streaming content has richer tool info than history)
+    // Clear streaming TEXT messages (history has them now)
+    // But KEEP streaming tool cards (they have richer data than history)
     if (!state.chatRunId) {
       state.chatStreamMessages = [];
-      state.chatStreamToolCalls = [];
+      // Don't clear chatStreamToolCalls - they persist until new run
     }
   } catch (err) {
     state.lastError = String(err);
