@@ -112,6 +112,34 @@ May need to add `toolcall` to the list of recognized types.
 - [ ] Refresh the page → history loads → UI looks identical
 - [ ] No "streaming" vs "history" distinction visible to user
 
+## Implementation Progress
+
+### Completed (2026-01-24)
+
+1. **Backend (server-chat.ts)**
+   - Added `toolCallId` to tool event payload
+   - Events now include `tool.id` for pairing
+
+2. **Frontend (controllers/chat.ts)**
+   - `tool-start`: Adds `{ type: "toolCall", id, name, arguments }` to assistant content
+   - `tool-end`: Adds SEPARATE `{ role: "toolResult", toolCallId, toolName, content }` message
+   - Matches exact history format
+
+3. **View (views/chat.ts)**
+   - Removed skip for toolResult messages
+   - Removed toolMessages rendering (duplicate data path)
+   - All messages flow through ONE array
+
+4. **Tool cards (tool-cards.ts)**
+   - Added recognition for `toolCall` type (history format)
+   - Added `id` field to ToolCard type
+
+### Remaining
+
+- [ ] Manual testing with real tool calls
+- [ ] Verify no visual differences between streaming and refresh
+- [ ] Consider removing `chatToolMessages` state entirely (currently unused)
+
 ## Notes
 
 - Keep tool results as separate messages (not embedded in assistant message)
