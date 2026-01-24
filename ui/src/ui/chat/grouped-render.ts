@@ -221,7 +221,8 @@ function renderGroupedMessage(
     .filter(Boolean)
     .join(" ");
 
-  if (!markdown && hasToolCards && isToolResult) {
+  // Tool result messages: only show the tool card, not the raw output text
+  if (isToolResult && hasToolCards) {
     return html`${toolCards.map((card) =>
       renderToolCardSidebar(card, onOpenSidebar),
     )}`;
